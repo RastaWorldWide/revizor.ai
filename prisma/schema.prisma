@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  DRAFT
+  REVIEWS_IMPORTED
+  SITE_GENERATED
+  PUBLISHED
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  sourceUrl   String
+  status      ProjectStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  place       Place?
+  reviews     Review[]
+  generatedSite GeneratedSite?
+
+  @@index([status])
+}
+
+model Place {
+  id           String   @id @default(cuid())
+  projectId    String   @unique
+  firmId       String   @unique
+  name         String
+  address      String?
+  fullAddress  String?
+  rating       Float?
+  reviewsCount Int?
+  schedule     Json?
+  rubrics      Json?
+  contacts     Json?
+  point        Json?
+  raw          Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  projectId   String
+  externalId  String?
+  authorName  String?
+  rating      Float?
+  text        String
+  images      Json?
+  publishedAt DateTime?
+  source      String   @default("2gis")
+  raw         Json?
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, text])
+  @@index([projectId])
+}
+
+model GeneratedSite {
+  id        String   @id @default(cuid())
+  projectId String   @unique
+  slug      String   @unique
+  analysis  Json
+  content   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}

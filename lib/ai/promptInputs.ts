@@ -10,7 +10,7 @@ function numberEnv(name: string, fallback: number): number {
 
 function truncate(value: string, maxLength: number): string {
   const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 1)}…`;
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`;
 }
 
 export function compactPlaceForPrompt(place: NormalizedPlace) {
@@ -35,8 +35,8 @@ export function compactReviewsForPrompt(
     maxTextChars?: number;
   }
 ) {
-  const maxReviews = options?.maxReviews ?? numberEnv("AI_MAX_REVIEWS_FOR_ANALYSIS", 18);
-  const maxTextChars = options?.maxTextChars ?? numberEnv("AI_REVIEW_MAX_CHARS", 300);
+  const maxReviews = options?.maxReviews ?? numberEnv("AI_MAX_REVIEWS_FOR_ANALYSIS", 8);
+  const maxTextChars = options?.maxTextChars ?? numberEnv("AI_REVIEW_MAX_CHARS", 220);
 
   return reviews
     .slice()

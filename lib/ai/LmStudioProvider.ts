@@ -17,10 +17,11 @@ export class LmStudioProvider implements AiProvider {
 
   async generateObject<T>(input: GenerateObjectInput<T>): Promise<T> {
     let validationFeedback = "";
+    const noThink = process.env.AI_DISABLE_THINKING === "true" ? "\n/no_think" : "";
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const completion = await this.client.chat.completions.create({
-        model: this.model,
+        model: input.model ?? this.model,
         temperature: input.temperature ?? 0.2,
         response_format: {
           type: "json_schema",
@@ -37,7 +38,7 @@ export class LmStudioProvider implements AiProvider {
           },
           {
             role: "user",
-            content: `${input.prompt}${validationFeedback}`
+            content: `${input.prompt}${validationFeedback}${noThink}`
           }
         ]
       });

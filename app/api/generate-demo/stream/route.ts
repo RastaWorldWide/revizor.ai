@@ -89,8 +89,8 @@ export async function POST(request: Request) {
       await send({
         type: "progress",
         step: "analysis",
-        title: "Понимаем настроение гостей",
-        message: "Локальная модель ищет причины визита, частые темы, цитаты, предупреждения и стиль.",
+        title: "Быстро выделяем главное",
+        message: "Локальная модель делает короткий анализ: 2-3 причины визита, настроение, частые темы и лучшие цитаты.",
         data: { reviewsCount: reviews.length, photoCount }
       });
       const analysis = await analyzeReviews({ place, reviews: normalizedReviews });
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
         type: "progress",
         step: "site",
         title: "Собираем JSON сайта",
-        message: "Генерируем hero, секции, CTA и тексты только на основе найденных доказательств.",
+        message: "Генерируем hero, отраслевой блок, CTA и тексты только на основе найденных доказательств.",
         data: {
           style: analysis.styleDna.adjectives.slice(0, 3),
           topics: analysis.popularMentions.slice(0, 3).map((item) => item.label)

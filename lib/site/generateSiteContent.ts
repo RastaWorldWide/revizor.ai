@@ -35,7 +35,7 @@ export const generatedSiteSchema = z.object({
   ),
   sections: z.array(
     z.object({
-      type: z.enum(["why_choose_us", "mood", "popular_mentions", "quotes", "tips", "hours", "map", "final_cta"]),
+      type: z.enum(["why_choose_us", "mood", "business_specific", "popular_mentions", "quotes", "tips", "hours", "map", "final_cta"]),
       title: z.string(),
       intro: z.string(),
       items: z.array(
@@ -119,7 +119,7 @@ export const generatedSiteJsonSchema = {
         properties: {
           type: {
             type: "string",
-            enum: ["why_choose_us", "mood", "popular_mentions", "quotes", "tips", "hours", "map", "final_cta"]
+            enum: ["why_choose_us", "mood", "business_specific", "popular_mentions", "quotes", "tips", "hours", "map", "final_cta"]
           },
           title: { type: "string" },
           intro: { type: "string" },
@@ -165,11 +165,11 @@ export async function generateSiteContent(input: {
   reviews: Array<NormalizedReview & { id?: string }>;
   analysis: ReviewAnalysis;
 }): Promise<GeneratedSiteContent> {
-  const ai = getAiProvider();
+  const ai = getAiProvider(process.env.AI_SITE_PROVIDER);
   const place = compactPlaceForPrompt(input.place);
   const reviews = compactReviewsForPrompt(input.reviews, {
-    maxReviews: Number(process.env.AI_MAX_REVIEWS_FOR_SITE) || 8,
-    maxTextChars: Number(process.env.AI_REVIEW_MAX_CHARS) || 300
+    maxReviews: Number(process.env.AI_MAX_REVIEWS_FOR_SITE) || 5,
+    maxTextChars: Number(process.env.AI_REVIEW_MAX_CHARS) || 220
   });
 
   return ai.generateObject({
@@ -177,12 +177,14 @@ export async function generateSiteContent(input: {
     schema: generatedSiteSchema,
     jsonSchema: generatedSiteJsonSchema,
     temperature: 0.25,
-    system: "You create JSON content for a one-page local business website. Return Russian text only. Be expressive but never make unsupported claims.",
+    model: process.env.AI_SITE_MODEL,
+    system: "You create premium one-page website content for a local business. Return Russian text only. Be concrete, concise, commercial, and never make unsupported claims.",
     prompt: `Create website content only as JSON matching the schema.
 
 Required sections:
 - why_choose_us
 - mood
+- business_specific
 - popular_mentions
 - quotes
 - tips
@@ -192,11 +194,18 @@ Required sections:
 
 Rules:
 - Use Russian language in all values.
+- Write like a professional local business website, not like a review summary.
+- Keep titles short and specific. Avoid generic section titles like "Наши преимущества".
+- Make hero title memorable but factual. Put value and mood in subtitle.
 - The website style must reflect the emotional profile of the reviews.
 - Do not generate unsupported claims.
+- Add one business_specific section adapted to businessType:
+  restaurant/cafe: dishes, breakfasts, occasions, atmosphere; salon: services and masters; clinic: trust and process; store: assortment and choice.
+  Use only topics proven by reviews.
+- Sections should have 2-4 strong items. Each item should be useful for a real visitor deciding whether to go.
 - Add evidenceReviewIds for all claims based on reviews.
 - For hours and map, use place card data without evidenceReviewIds.
-- Navigation href values must point to section ids: #why_choose_us, #mood, etc.
+- Navigation href values must point to section ids: #why_choose_us, #mood, #business_specific, etc.
 
 Place:
 ${JSON.stringify(place)}

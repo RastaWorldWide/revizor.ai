@@ -14,6 +14,7 @@ export class OllamaProvider implements AiProvider {
 
   async generateObject<T>(input: GenerateObjectInput<T>): Promise<T> {
     let validationFeedback = "";
+    const noThink = process.env.AI_DISABLE_THINKING === "true" ? "\n/no_think" : "";
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/api/chat`, {
@@ -22,7 +23,7 @@ export class OllamaProvider implements AiProvider {
           "content-type": "application/json"
         },
         body: JSON.stringify({
-          model: this.model,
+          model: input.model ?? this.model,
           stream: false,
           format: input.jsonSchema,
           options: {
@@ -30,7 +31,7 @@ export class OllamaProvider implements AiProvider {
           },
           messages: [
             { role: "system", content: input.system },
-            { role: "user", content: `${input.prompt}${validationFeedback}` }
+            { role: "user", content: `${input.prompt}${validationFeedback}${noThink}` }
           ]
         })
       });

@@ -7,7 +7,10 @@ export type GenerateObjectInput<T> = {
   schema: z.ZodType<T>;
   jsonSchema: Record<string, unknown>;
   temperature?: number;
+  model?: string;
 };
+
+export type AiProviderName = "lmstudio" | "ollama" | "openrouter";
 
 export interface AiProvider {
   generateObject<T>(input: GenerateObjectInput<T>): Promise<T>;

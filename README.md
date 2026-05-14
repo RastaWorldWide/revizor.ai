@@ -275,6 +275,16 @@ Content-Type: application/json
 http://localhost:3000/s/kafe-romashka-12345
 ```
 
+На странице готового сайта есть кнопка **Скачать HTML**. Она выгружает статический HTML-файл с уже собранным лендингом: его можно открыть в браузере, отдать разработчику или доработать вручную в редакторе кода.
+
+![Кнопка Скачать HTML на готовом сайте](docs/images/site-download-html-button.jpg)
+
+Endpoint для выгрузки:
+
+```text
+GET /api/sites/[slug]/download
+```
+
 Wildcard subdomains:
 
 - `yourdomain.ru` и `app.yourdomain.ru` открывают основное приложение;

@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { optionalEnv } from "@/lib/env";
 import type { AiProvider, GenerateObjectInput } from "./AiProvider";
 import { extractJsonObject } from "./AiProvider";
+import { isAutoFreeModel, resolveOpenRouterFreeModels } from "./OpenRouterFreeModelResolver";
 
 type JsonMode = "schema" | "json_object" | "prompt";
 
@@ -54,6 +55,10 @@ export class OpenRouterProvider implements AiProvider {
   }
 
   private async createCompletion<T>(input: GenerateObjectInput<T>, validationFeedback: string) {
+    const requestedModel = input.model ?? this.model;
+    const candidateModels = isAutoFreeModel(requestedModel)
+      ? (await resolveOpenRouterFreeModels()).slice(0, Number(process.env.OPENROUTER_MAX_AUTO_FREE_MODELS) || 2)
+      : [requestedModel];
     const requestedMode = process.env.OPENROUTER_JSON_MODE;
     const modes: JsonMode[] =
       requestedMode === "json_object" || requestedMode === "prompt" || requestedMode === "schema"
@@ -62,26 +67,37 @@ export class OpenRouterProvider implements AiProvider {
 
     let lastError: unknown;
 
-    for (const mode of modes) {
-      try {
-        return await this.client.chat.completions.create({
-          model: input.model ?? this.model,
-          temperature: input.temperature ?? 0.2,
-          response_format: this.getResponseFormat(mode, input),
-          messages: [
-            {
-              role: "system",
-              content: input.system
-            },
-            {
-              role: "user",
-              content: `${input.prompt}${this.getFallbackSchemaPrompt(mode, input)}${validationFeedback}`
-            }
-          ]
-        });
-      } catch (error) {
-        lastError = error;
-        if (!isJsonModeCapabilityError(error)) {
+    for (const model of candidateModels) {
+      for (const mode of modes) {
+        try {
+          return await this.client.chat.completions.create({
+            model,
+            temperature: input.temperature ?? 0.2,
+            response_format: this.getResponseFormat(mode, input),
+            messages: [
+              {
+                role: "system",
+                content: input.system
+              },
+              {
+                role: "user",
+                content: `${input.prompt}${this.getFallbackSchemaPrompt(mode, input)}${validationFeedback}`
+              }
+            ]
+          },
+          {
+            timeout: Number(process.env.OPENROUTER_REQUEST_TIMEOUT_MS) || Number(process.env.AI_REQUEST_TIMEOUT_MS) || 15000
+          });
+        } catch (error) {
+          lastError = error;
+          if (isJsonModeCapabilityError(error)) {
+            continue;
+          }
+
+          if (candidateModels.length > 1 && isModelAvailabilityError(error)) {
+            break;
+          }
+
           throw error;
         }
       }
@@ -123,4 +139,9 @@ export class OpenRouterProvider implements AiProvider {
 function isJsonModeCapabilityError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /response_format|json_schema|json_object|structured|schema/i.test(message);
+}
+
+function isModelAvailabilityError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /429|rate.?limit|timeout|timed out|temporarily|unavailable|overloaded|provider returned error/i.test(message);
 }

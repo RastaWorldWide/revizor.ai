@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { reviewAnalysisSchema, type ReviewAnalysis } from "@/lib/ai/analyzeReviews";
 import { getDb } from "@/lib/db";
-import { generatedSiteSchema, type GeneratedSiteContent } from "@/lib/site/generateSiteContent";
+import { cleanGeneratedSiteContent, generatedSiteSchema, type GeneratedSiteContent } from "@/lib/site/generateSiteContent";
 
 type PageProps = {
   params: Promise<{
@@ -90,96 +89,6 @@ function getPrimaryNavigation(sections: Section[], hasPhotos: boolean) {
   }
 
   return items;
-}
-
-function sectionItem(title: string, text: string, evidenceReviewIds: string[] = []): Section["items"][number] {
-  return {
-    title,
-    text,
-    evidenceReviewIds
-  };
-}
-
-function claimItems(claims: Array<{ title: string; description: string; evidenceReviewIds: string[] }>, fallback: Section["items"]): Section["items"] {
-  const items = claims.slice(0, 4).map((claim) => sectionItem(claim.title, claim.description, claim.evidenceReviewIds));
-  return items.length > 0 ? items : fallback;
-}
-
-function mentionItems(analysis: ReviewAnalysis | null, fallback: Section["items"]): Section["items"] {
-  const items =
-    analysis?.popularMentions.slice(0, 6).map((mention) =>
-      sectionItem(
-        mention.label,
-        mention.countEstimate > 1 ? `Эту тему гости упоминают чаще других: примерно ${mention.countEstimate} раз.` : "Эта тема встречается в отзывах гостей.",
-        mention.evidenceReviewIds
-      )
-    ) ?? [];
-
-  return items.length > 0 ? items : fallback;
-}
-
-function buildCoreSection(type: Section["type"], analysis: ReviewAnalysis | null, placeName: string, content: GeneratedSiteContent): Section | null {
-  if (type === "why_choose_us") {
-    return {
-      type,
-      title: `Почему выбирают ${placeName}`,
-      intro: "Коротко о том, что помогает гостям принять решение и вернуться снова.",
-      items: claimItems(analysis?.mainReasonsToVisit ?? [], [
-        sectionItem("Решение на основе отзывов", "Страница собрана из реальных отзывов гостей, поэтому акценты отражают то, что люди уже отмечают сами."),
-        sectionItem("Понятная карточка места", "Адрес, рейтинг, отзывы и маршрут собраны рядом, чтобы посетителю не приходилось искать детали отдельно."),
-        sectionItem("Без неподтвержденных обещаний", "Тексты не придумывают лишнего и опираются на данные карточки и отзывы.")
-      ])
-    };
-  }
-
-  if (type === "mood") {
-    return {
-      type,
-      title: "Атмосфера по отзывам",
-      intro: `Настроение страницы: ${content.theme.mood}. Оно собрано из формулировок гостей и общего тона отзывов.`,
-      items: claimItems([...(analysis?.emotionalProfile ?? []), ...(analysis?.atmosphereHighlights ?? [])], [
-        sectionItem("Живое впечатление", "Этот блок показывает не список услуг, а ощущение, которое остается у посетителей после визита."),
-        sectionItem("Тональность отзывов", "Цвета, темп и подача страницы подстроены под эмоциональный профиль места.")
-      ])
-    };
-  }
-
-  if (type === "business_specific") {
-    return {
-      type,
-      title: "Что предлагаем",
-      intro: "Самые прикладные причины зайти: то, что гости упоминают в контексте еды, услуг, сервиса, выбора или процесса.",
-      items: claimItems([...(analysis?.serviceHighlights ?? []), ...(analysis?.mainReasonsToVisit ?? [])], [
-        sectionItem("Главные поводы для визита", "Блок адаптируется под тип бизнеса: ресторан, салон, клинику, сервис или магазин."),
-        sectionItem("То, что важно посетителю", "На первый план выводятся не общие обещания, а конкретные темы из отзывов.")
-      ])
-    };
-  }
-
-  if (type === "popular_mentions") {
-    return {
-      type,
-      title: "Часто упоминается",
-      intro: "Повторяющиеся темы помогают быстро понять, чем место запоминается гостям.",
-      items: mentionItems(analysis, [
-        sectionItem("Отзывы гостей", "Когда отзывов станет больше, здесь появятся наиболее частые темы и формулировки."),
-        sectionItem("Главные акценты", "Секция показывает повторяющиеся причины интереса к месту.")
-      ])
-    };
-  }
-
-  return null;
-}
-
-function ensureCoreSections(sections: Section[], analysis: ReviewAnalysis | null, placeName: string, content: GeneratedSiteContent): Section[] {
-  const order: Section["type"][] = ["why_choose_us", "mood", "business_specific", "popular_mentions"];
-  const byType = new Map(sections.map((section) => [section.type, section]));
-  const coreSections = order
-    .map((type) => byType.get(type) ?? buildCoreSection(type, analysis, placeName, content))
-    .filter((section): section is Section => Boolean(section));
-  const rest = sections.filter((section) => !order.includes(section.type));
-
-  return [...coreSections, ...rest];
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -494,17 +403,11 @@ export default async function PublicSitePage({ params }: PageProps) {
     notFound();
   }
 
-  const content = parsed.data;
-  const analysis = reviewAnalysisSchema.safeParse(site.analysis);
+  const content = cleanGeneratedSiteContent(parsed.data);
   const place = site.project.place;
   const routeUrl = site.project.sourceUrl;
   const reviewPhotos = getReviewPhotos(site.project.reviews);
-  const topSections = ensureCoreSections(
-    content.sections.filter((section) => section.type !== "final_cta"),
-    analysis.success ? analysis.data : null,
-    place.name,
-    content
-  );
+  const topSections = content.sections.filter((section) => section.type !== "final_cta");
   const primaryNavigation = getPrimaryNavigation(topSections, reviewPhotos.length > 0);
 
   return (
@@ -536,9 +439,14 @@ export default async function PublicSitePage({ params }: PageProps) {
               </a>
             ))}
           </div>
-          <a className="shrink-0 rounded-md bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white" href={routeUrl} rel="noreferrer" target="_blank">
-            Маршрут в 2ГИС
-          </a>
+          <div className="flex shrink-0 items-center gap-2">
+            <a className="rounded-md bg-[color:var(--primary)] px-4 py-2 text-sm font-medium text-white" href={routeUrl} rel="noreferrer" target="_blank">
+              Маршрут в 2ГИС
+            </a>
+            <a className="hidden rounded-md border border-[color:var(--line)] bg-white/55 px-4 py-2 text-sm font-medium lg:inline-flex" href={`/api/sites/${slug}/download`}>
+              Скачать HTML
+            </a>
+          </div>
         </nav>
         <div className="border-t border-[color:var(--line)] lg:hidden">
           <div className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-5 py-3">

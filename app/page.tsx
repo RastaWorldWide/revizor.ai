@@ -31,7 +31,6 @@ const steps = [
   { id: "reviews", label: "Отзывы" },
   { id: "analysis", label: "Анализ" },
   { id: "site", label: "Сайт" },
-  { id: "polish", label: "Редактура" },
   { id: "done", label: "Готово" }
 ];
 

@@ -4,6 +4,7 @@ import type { NormalizedReview } from "@/lib/reviews/ReviewsProvider";
 import type { ReviewAnalysis } from "@/lib/ai/analyzeReviews";
 import { getAiProvider } from "@/lib/ai/getAiProvider";
 import { compactPlaceForPrompt, compactReviewsForPrompt } from "@/lib/ai/promptInputs";
+import { buildFallbackSiteContent } from "./fallbackSiteContent";
 
 const evidenceIdsSchema = z.array(z.string()).default([]);
 
@@ -172,7 +173,9 @@ export async function generateSiteContent(input: {
     maxTextChars: Number(process.env.AI_REVIEW_MAX_CHARS) || 220
   });
 
-  return ai.generateObject({
+  try {
+    const content = await withTimeout(
+      ai.generateObject({
     name: "generated_site_content",
     schema: generatedSiteSchema,
     jsonSchema: generatedSiteJsonSchema,
@@ -181,7 +184,7 @@ export async function generateSiteContent(input: {
     system: "You create premium one-page website content for a local business. Return Russian text only. Be concrete, concise, commercial, and never make unsupported claims.",
     prompt: `Create website content only as JSON matching the schema.
 
-Required sections:
+Possible sections:
 - why_choose_us
 - mood
 - business_specific
@@ -199,13 +202,15 @@ Rules:
 - Make hero title memorable but factual. Put value and mood in subtitle.
 - The website style must reflect the emotional profile of the reviews.
 - Do not generate unsupported claims.
-- Add one business_specific section adapted to businessType:
+- Do not add a section just to fill the page. Return fewer sections when evidence is weak.
+- Add business_specific only when reviews clearly mention services, products, dishes, choice, process, masters, doctors, assortment, or other concrete offer details.
+- Adapt business_specific to businessType:
   restaurant/cafe: dishes, breakfasts, occasions, atmosphere; salon: services and masters; clinic: trust and process; store: assortment and choice.
   Use only topics proven by reviews.
-- Sections should have 2-4 strong items. Each item should be useful for a real visitor deciding whether to go.
+- Sections should have 2-4 strong items. If a section has fewer than 2 useful items, skip that section.
 - Add evidenceReviewIds for all claims based on reviews.
-- For hours and map, use place card data without evidenceReviewIds.
-- Navigation href values must point to section ids: #why_choose_us, #mood, #business_specific, etc.
+- For hours and map, use place card data without evidenceReviewIds, but skip them if there is no useful place data.
+- Navigation must include only sections that are returned. Navigation href values must point to section ids: #why_choose_us, #mood, #business_specific, etc.
 
 Place:
 ${JSON.stringify(place)}
@@ -215,5 +220,65 @@ ${JSON.stringify(input.analysis)}
 
 Short review sample:
 ${JSON.stringify(reviews)}`
+      }),
+      Number(process.env.AI_SITE_GENERATION_TIMEOUT_MS) || 25000
+    );
+
+    return cleanGeneratedSiteContent(content);
+  } catch (error) {
+    if (process.env.AI_SITE_FALLBACK_ON_ERROR === "false") {
+      throw error;
+    }
+
+    return cleanGeneratedSiteContent(buildFallbackSiteContent(input));
+  }
+}
+
+export function cleanGeneratedSiteContent(content: GeneratedSiteContent): GeneratedSiteContent {
+  const sections = content.sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(isUsefulItem)
+    }))
+    .filter(isUsefulSection);
+  const sectionIds = new Set(sections.map((section) => `#${section.type}`));
+
+  return {
+    ...content,
+    navigation: content.navigation.filter((item) => sectionIds.has(item.href)),
+    sections
+  };
+}
+
+function isUsefulItem(item: GeneratedSiteContent["sections"][number]["items"][number]): boolean {
+  const title = item.title.trim();
+  const text = item.text.trim();
+  return title.length >= 3 && text.length >= 18 && title !== text;
+}
+
+function isUsefulSection(section: GeneratedSiteContent["sections"][number]): boolean {
+  if (section.type === "hours" || section.type === "map" || section.type === "final_cta") {
+    return section.items.length > 0 && section.title.trim().length > 0;
+  }
+
+  if (section.type === "quotes") {
+    return section.items.length > 0;
+  }
+
+  return section.items.length >= 2 && section.title.trim().length > 0 && section.intro.trim().length >= 20;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(`AI site generation timed out after ${timeoutMs}ms`)), timeoutMs);
   });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }

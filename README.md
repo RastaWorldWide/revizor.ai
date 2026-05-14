@@ -30,6 +30,57 @@ revizor.ai превращает карточку бизнеса из 2ГИС и 
 - LM Studio / Ollama / OpenRouter
 - Docker Compose для локальной базы
 
+## Что нужно перед запуском
+
+Для локального запуска нужны три внешние вещи:
+
+1. **PostgreSQL**
+
+   Рекомендуемый вариант для разработки - Docker:
+
+   ```bash
+   docker compose up -d
+   ```
+
+   В проекте уже есть `docker-compose.yml`, который поднимает обычный PostgreSQL 16 на `localhost:5432`.
+
+   Можно использовать и обычный локально установленный PostgreSQL без Docker. Главное, чтобы `DATABASE_URL` указывал на доступную базу:
+
+   ```env
+   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/review_sites"
+   ```
+
+2. **Apify token**
+
+   Нужен для получения карточки места, отзывов и фотографий из 2ГИС. Токен указывается в:
+
+   ```env
+   APIFY_TOKEN="your_apify_token"
+   ```
+
+3. **AI server**
+
+   Для локальной модели запустите один из вариантов:
+
+   - **LM Studio**: включите OpenAI-compatible server, обычно `http://localhost:1234/v1`;
+   - **Ollama**: запустите Ollama API, обычно `http://localhost:11434`;
+   - **OpenRouter**: можно не запускать локальную модель, но нужен `OPENROUTER_API_KEY`.
+
+   Для LM Studio базовые настройки выглядят так:
+
+   ```env
+   AI_PROVIDER="lmstudio"
+   AI_BASE_URL="http://localhost:1234/v1"
+   AI_API_KEY="local"
+   AI_MODEL="qwen/qwen3-14b"
+   ```
+
+   Важно: `AI_MODEL`, `AI_ANALYSIS_MODEL` и `AI_SITE_MODEL` должны совпадать с model id, который отдаёт локальный сервер. Проверить LM Studio можно так:
+
+   ```bash
+   curl http://localhost:1234/v1/models
+   ```
+
 ## Быстрый запуск
 
 1. Установить зависимости:
